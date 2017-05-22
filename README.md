@@ -10,7 +10,7 @@ personal record? Then this is the app for you.
 Do you want to know how far off you were your PR on a ride? Then this app is for
 you.
 
-This will pull all your efforts from an activity and find yoru Personal Record
+This will pull all your efforts from an activity and find your Personal Record
 for the segments on that activity and output a CSV that you can either import
 into Excel or some other CSV processing tool.
 
