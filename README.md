@@ -73,4 +73,5 @@ TODO
 
 - Better way to get access token.
 - Don't just output csv
+- Ability to output in metric or English
 - Lots more.
