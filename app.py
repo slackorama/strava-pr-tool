@@ -8,9 +8,10 @@ import codecs
 import csv
 import logging
 import os
-import sys
 import webbrowser
+from collections import defaultdict
 
+import click
 from stravalib import unithelper
 from stravalib.client import Client
 
@@ -19,7 +20,8 @@ LOG = logging.basicConfig(level=logging.ERROR)
 
 class Row:
 
-    def __init__(self, bikes, activity, this_effort, top_effort, segment):
+    def __init__(self, bikes, activity, this_effort=None, top_effort=None,
+                 segment=None):
         self.bikes = bikes
         self.activity = activity
         self.this_effort = this_effort
@@ -34,6 +36,22 @@ class Row:
         if bike:
             return bike.name
         return '???'
+
+    def ride_date(self):
+        start = self.activity.start_date_local
+        return start.strftime('%Y-%m-%d %H:%S')
+
+    def ride_name(self):
+        return self.activity.name
+
+    def ride_distance(self):
+        return '{0:0.3f}'.format(unithelper.miles(self.activity.distance).num)
+
+    def ride_elapsed_time(self):
+        return unithelper.seconds(self.activity.elapsed_time).num
+
+    def ride_moving_time(self):
+        return unithelper.seconds(self.activity.moving_time).num
 
     def name(self):
         return self._segment.name
@@ -157,21 +175,100 @@ def get_access_token():
     return access_token
 
 
-def main():
+@click.group()
+@click.pass_context
+def main(ctx):
     client = Client()
     client.access_token = get_access_token()
 
-    athlete = client.get_athlete()
+    ctx.obj['client'] = client
+    ctx.obj['athlete'] = client.get_athlete()
 
-    bikes = get_bikes(athlete)
+    ctx.obj['bikes'] = get_bikes(ctx.obj['athlete'])
+
+
+@main.command(name='list')
+@click.option('--limit', type=int)
+@click.pass_context
+def get_all_rides(ctx, limit):
+    """List all the rides."""
+    client = ctx.obj['client']
+    bikes = ctx.obj['bikes']
+
+    if limit:
+        limit = int(limit)
+    else:
+        limit = None
+
+    activities = client.get_activities(limit=limit)
+    output = cStringIO.StringIO()
+    csv_out = UnicodeWriter(output)
+    columns = ['date', 'name', 'bikes', 'distance', 'elapsed_time',
+               'moving_time']
+    get_columns = ['ride_date', 'ride_name', 'bike', 'ride_distance',
+                   'ride_elapsed_time', 'ride_moving_time']
+    csv_out.writerow(columns)
+    for a in activities:
+        row = Row(bikes=bikes,
+                  activity=a)
+        out_row = []
+        for f in get_columns:
+            func = getattr(row, f)
+            out_row.append(func())
+        csv_out.writerow(out_row)
+    print(output.getvalue().strip())
+
+
+@main.command()
+@click.pass_context
+def summary(ctx):
+    """Summary of everything you've done on Strava."""
+    client = ctx.obj['client']
+    bikes = ctx.obj['bikes']
+
+    by_bike = defaultdict(lambda: defaultdict(int))
+
+    activities = client.get_activities()
+    for a in activities:
+        if a.type != 'Ride':
+            continue
+        by_bike[a.gear_id]['distance'] += unithelper.miles(a.distance).num
+        by_bike[a.gear_id]['rides'] += 1
+
+    output = cStringIO.StringIO()
+    csv_out = UnicodeWriter(output)
+    columns = ['bike', 'rides', 'distance']
+    csv_out.writerow(columns)
+    for (bike, datap) in by_bike.items():
+        bike_name = bikes.get(bike)
+        if not bike_name:
+            bike_name = 'Retired bike ({})'.format(bike)
+        else:
+            bike_name = bike_name.name
+        csv_out.writerow([bike_name, datap['rides'],
+                          '{0:0.2f}'.format(datap['distance'])])
+    print(output.getvalue().strip())
+
+
+@main.command()
+@click.argument('rides', nargs=-1, type=int)
+@click.pass_context
+def ride(ctx, rides):
+    """List all the segments from a ride."""
+    client = ctx.obj['client']
+    athlete = ctx.obj['athlete']
+    bikes = ctx.obj['bikes']
 
     act_cache = dict()
     seg_cache = dict()
 
-    if len(sys.argv) > 1:
-        activities = [client.get_activity(int(sys.argv[1]),
+    if len(rides) == 1:
+        activities = [client.get_activity(int(rides[0]),
                                           include_all_efforts=True)]
+    elif len(rides) > 1:
+        raise ValueError('Sorry, can only handle one ride at a time.')
     else:
+        # get the most recent ride
         activities = client.get_activities(limit=1)
 
     output = cStringIO.StringIO()
@@ -211,4 +308,4 @@ def main():
         print(output.getvalue().strip())
 
 if __name__ == '__main__':
-    main()
+    main(obj={})
