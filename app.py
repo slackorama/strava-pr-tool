@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 
-import ConfigParser
-import cStringIO
+import configparser
+import io
 import codecs
 import csv
 import logging
@@ -105,7 +105,7 @@ class UnicodeReader:
 
     def next(self):
         row = self.reader.next()
-        return [unicode(s, 'utf-8') for s in row]
+        return [str(s, 'utf-8') for s in row]
 
     def __iter__(self):
         return self
@@ -119,7 +119,7 @@ class UnicodeWriter:
 
     def __init__(self, f, dialect=csv.excel, encoding='utf-8', **kwds):
         # Redirect output to a queue
-        self.queue = cStringIO.StringIO()
+        self.queue = io.StringIO()
         self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
         self.stream = f
         self.encoder = codecs.getincrementalencoder(encoding)()
@@ -127,7 +127,7 @@ class UnicodeWriter:
     def writerow(self, row):
         therow = []
         for s in row:
-            if isinstance(s, basestring):
+            if isinstance(s, str):
                 therow.append(s.encode('utf-8'))
             else:
                 therow.append(s)
@@ -164,7 +164,7 @@ def get_bikes(athlete):
 
 
 def get_access_token():
-    config = ConfigParser.ConfigParser()
+    config = configparser.ConfigParser()
     config.read(['strava-pr.cfg',
                  os.path.expanduser('strava-pr.cfg'),
                  os.path.expanduser('.config/strava-pr/config')])
@@ -201,7 +201,7 @@ def get_all_rides(ctx, limit):
         limit = None
 
     activities = client.get_activities(limit=limit)
-    output = cStringIO.StringIO()
+    output = io.StringIO()
     csv_out = UnicodeWriter(output)
     columns = ['date', 'name', 'bikes', 'distance', 'elapsed_time',
                'moving_time']
